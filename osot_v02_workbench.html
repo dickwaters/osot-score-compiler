@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>OSOT v0.2 播音知识点标注面板与分谱工作台</title>
+<style>
+  :root { --bg:#0b1120; --card:#131c31; --line:#24324d; --txt:#e2e8f0; --muted:#94a3b8;
+          --accent:#38bdf8; --red:#ef4444; --amber:#f59e0b; --green:#10b981; --purple:#a78bfa; }
+  * { box-sizing:border-box; }
+  body { margin:0; padding:20px; background:var(--bg); color:var(--txt); font-family:"PingFang SC","Microsoft YaHei",system-ui,sans-serif; }
+  .wrap { max-width:1200px; margin:0 auto; }
+  header { display:flex; flex-wrap:wrap; justify-content:space-between; align-items:center; gap:12px; margin-bottom:16px; }
+  h1 { margin:0; font-size:20px; }
+  .btn { background:#1e293b; color:var(--txt); border:1px solid var(--line); padding:7px 13px; border-radius:8px; cursor:pointer; font-size:13px; }
+  .btn:hover { border-color:var(--accent); }
+  .btn.primary { background:#0284c7; border-color:#0284c7; color:#fff; font-weight:600; }
+  .panel { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:16px; margin-bottom:14px; }
+  .panel-title { font-size:14px; font-weight:700; color:#cbd5e1; margin-bottom:10px; display:flex; justify-content:space-between; }
+  .row { display:flex; flex-wrap:wrap; gap:10px; align-items:center; }
+  select, input[type="text"] { background:#0f172a; color:var(--txt); border:1px solid var(--line); border-radius:6px; padding:6px 10px; font-size:13px; }
+  .tool-group { display:flex; flex-wrap:wrap; gap:6px; margin-bottom:8px; align-items:center; }
+  .tool-lbl { font-size:12px; color:var(--muted); min-width:86px; }
+  .chip { padding:4px 10px; border-radius:999px; font-size:12px; border:1px solid var(--line); background:#0f172a; color:#cbd5e1; cursor:pointer; }
+  .chip.active { background:#0284c7; border-color:#38bdf8; color:#fff; font-weight:600; }
+  .script-area { font-size:21px; line-height:2.5; display:flex; flex-wrap:wrap; gap:3px; padding:8px 0; }
+  .tok { display:inline-flex; flex-direction:column; align-items:center; padding:3px 7px; border-radius:6px; cursor:pointer; border:1px solid transparent; position:relative; }
+  .tok:hover { border-color:var(--accent); }
+  .tok.selected { border-color:#fff; box-shadow:0 0 0 2px #38bdf866; }
+  .tok.S2 { background:#7f1d1d; color:#fecaca; font-weight:700; }
+  .tok.S1 { background:#713f12; color:#fef08a; font-weight:600; }
+  .mini-tags { font-size:10px; color:#93c5fd; line-height:1.1; margin-top:2px; max-width:54px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .pause-mk { font-size:14px; font-weight:700; padding:0 4px; color:#38bdf8; }
+  pre { background:#060a14; padding:12px; border-radius:8px; overflow-x:auto; font-size:12.5px; color:#7dd3fc; margin:0; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div>
+      <h1>OSOT v0.2 播音知识点标注面板与分谱工作台</h1>
+      <div style="font-size:12px;color:var(--muted)">完全对齐《01_OSOT播音表达核心知识体系》v0.2 速查表 · 零依赖离线运行 · 支持导入/导出 osot-annotator JSON</div>
+    </div>
+    <div class="row">
+      <input type="file" id="fileInput" accept=".json" style="display:none">
+      <button class="btn" onclick="document.getElementById('fileInput').click()">📂 导入 OSOT JSON</button>
+      <button class="btn" onclick="loadDemo()">🧪 载入演示稿</button>
+      <button class="btn primary" onclick="exportV02Json()">💾 导出 v0.2 扩展 JSON</button>
+      <button class="btn" onclick="copyInline()">📋 复制内联韵律串</button>
+    </div>
+  </header>
+
+  <!-- 篇章级 Global -->
+  <div class="panel">
+    <div class="panel-title"><span>一、篇章级全局标签 (Global)</span><span style="font-size:12px;color:var(--muted)">对应 01_OSOT 速查表</span></div>
+    <div class="row">
+      <label style="font-size:13px;color:var(--muted)">体裁 genre_style：</label>
+      <select id="genreStyle" onchange="syncGlobal()">
+        <option>新闻消息</option><option>新闻评论</option><option>宣读式话语</option><option selected>文艺朗诵</option>
+      </select>
+      <label style="font-size:13px;color:var(--muted);margin-left:12px">宏观节奏 global_rhythm：</label>
+      <select id="globalRhythm" onchange="syncGlobal()">
+        <option>轻快型</option><option>凝重型</option><option>低沉型</option><option selected>高亢型</option><option>舒缓型</option><option>紧张型</option>
+      </select>
+      <label style="font-size:13px;color:var(--muted);margin-left:12px">标题：</label>
+      <input type="text" id="docTitle" value="《海燕》与散文节选（v0.2 演示）" style="min-width:260px" onchange="syncGlobal()">
+    </div>
+  </div>
+
+  <!-- 句级 + 字词级 刷子工具栏 -->
+  <div class="panel">
+    <div class="panel-title"><span>二、v0.2 知识点标注修改栏（先点选工具标签，再点击下方汉字打标）</span>
+      <span id="activeBrushInfo" style="color:var(--accent);font-size:12px">当前模式：🎧 仅选字查看</span>
+    </div>
+    <div class="tool-group">
+      <span class="tool-lbl">模式 / 重音：</span>
+      <span class="chip active" data-field="mode" data-val="inspect">🎧 仅选字</span>
+      <span class="chip" data-field="stress" data-val="primary">🔴 主重音(S2)</span>
+      <span class="chip" data-field="stress" data-val="secondary">🟡 次重音(S1)</span>
+      <span class="chip" data-field="stress" data-val="none">🧹 清重音</span>
+    </div>
+    <div class="tool-group">
+      <span class="tool-lbl">停连四法：</span>
+      <span class="chip" data-field="pause_type" data-val="落停">落停(//)</span>
+      <span class="chip" data-field="pause_type" data-val="扬停">扬停(/)</span>
+      <span class="chip" data-field="pause_type" data-val="直连">直连(^)</span>
+      <span class="chip" data-field="pause_type" data-val="曲连">曲连(┆B1)</span>
+    </div>
+    <div class="tool-group">
+      <span class="tool-lbl">句级语势/补气：</span>
+      <span class="chip" data-field="sentence_contour" data-val="波峰">波峰</span>
+      <span class="chip" data-field="sentence_contour" data-val="波谷">波谷</span>
+      <span class="chip" data-field="sentence_contour" data-val="上山">上山(起潮)</span>
+      <span class="chip" data-field="sentence_contour" data-val="下山[缺口保留]">下山[缺口保留]</span>
+      <span class="chip" data-field="sentence_contour" data-val="半起[缺口保留]">半起[缺口保留]</span>
+      <span class="chip" data-field="breath_action" data-val="偷气">🌬️ 偷气</span>
+      <span class="chip" data-field="breath_action" data-val="抢气">🌬️ 抢气</span>
+      <span class="chip" data-field="breath_action" data-val="就气">🌬️ 就气</span>
+    </div>
+    <div class="tool-group">
+      <span class="tool-lbl">重音十类功能：</span>
+      <span class="chip" data-field="stress_type" data-val="并列">并列</span>
+      <span class="chip" data-field="stress_type" data-val="对比">对比</span>
+      <span class="chip" data-field="stress_type" data-val="呼应">呼应</span>
+      <span class="chip" data-field="stress_type" data-val="递进">递进</span>
+      <span class="chip" data-field="stress_type" data-val="转折">转折</span>
+      <span class="chip" data-field="stress_type" data-val="肯定">肯定</span>
+      <span class="chip" data-field="stress_type" data-val="强调">强调</span>
+      <span class="chip" data-field="stress_type" data-val="比喻">比喻</span>
+      <span class="chip" data-field="stress_type" data-val="拟声">拟声</span>
+      <span class="chip" data-field="stress_type" data-val="反义">反义</span>
+    </div>
+    <div class="tool-group">
+      <span class="tool-lbl">虚实发声态：</span>
+      <span class="chip" data-field="voice_quality" data-val="实声">实声(Modal)</span>
+      <span class="chip" data-field="voice_quality" data-val="虚声">虚声(Soft)</span>
+      <span class="chip" data-field="voice_quality" data-val="气声">气声(Breathy)</span>
+      <span class="chip" data-field="voice_quality" data-val="喉化">喉化(Creaky)</span>
+    </div>
+  </div>
+
+  <!-- 播音稿交互区 -->
+  <div class="panel">
+    <div class="panel-title"><span>三、播音稿逐字标注区</span><span id="selDetail" style="font-size:12px;color:var(--muted)">点击任意汉字查看或打标</span></div>
+    <div class="script-area" id="scriptArea"></div>
+  </div>
+
+  <!-- 实时编译预览 -->
+  <div class="panel">
+    <div class="panel-title"><span>四、实时编译预览（arXiv:2610.29123 内联韵律标记串）</span></div>
+    <pre id="inlinePreview"></pre>
+  </div>
+</div>
+
+<script>
+let DOC = null;
+let BRUSH = { field: "mode", val: "inspect" };
+let SELECTED = -1;
+
+document.querySelectorAll(".chip").forEach(el => {
+  el.onclick = () => {
+    document.querySelectorAll(".chip.active").forEach(x => x.classList.remove("active"));
+    el.classList.add("active");
+    BRUSH = { field: el.dataset.field, val: el.dataset.val };
+    document.getElementById("activeBrushInfo").textContent =
+      BRUSH.field === "mode" ? "当前模式：🎧 仅选字查看" : `当前画笔：${BRUSH.field} = ${BRUSH.val}`;
+  };
+});
+
+document.getElementById("fileInput").onchange = e => {
+  const f = e.target.files[0]; if (!f) return;
+  const r = new FileReader();
+  r.onload = () => {
+    DOC = JSON.parse(r.result);
+    if (!DOC.tokens && DOC.tier1_objective_acoustic) {
+      // 自动适配工具 01 生成的三层 JSON
+      DOC.tokens = DOC.tier1_objective_acoustic.tokens.map((a, i) => ({
+        ...a,
+        stress: (DOC.tier2_algorithmic_hypothesis.tokens[i]||{}).candidate_stress === "S2" ? "primary" :
+                ((DOC.tier2_algorithmic_hypothesis.tokens[i]||{}).candidate_stress === "S1" ? "secondary" : "none"),
+        pause_after: "none",
+        v02: { voice_quality: (DOC.tier2_algorithmic_hypothesis.tokens[i]||{}).candidate_voice_quality_cn || "实声" },
+        knowledge_tags: []
+      }));
+    }
+    DOC.tokens.forEach(t => { t.v02 = t.v02 || {}; t.knowledge_tags = t.knowledge_tags || []; });
+    document.getElementById("docTitle").value = DOC.title || f.name;
+    render();
+  };
+  r.readAsText(f, "utf-8");
+};
+
+function loadDemo() {
+  const chars = [..."让暴风雨来得更猛烈些吧！夜色渐深。"];
+  const toks = [];
+  chars.forEach((ch, idx) => {
+    if ("！。，".includes(ch)) { if (toks.length) toks[toks.length-1].punct_after += ch; return; }
+    toks.push({
+      index: toks.length, char: ch, punct_after: "", start_ms: toks.length*220, end_ms: toks.length*220+200,
+      stress: ch==="更"||ch==="猛" ? "primary" : (ch==="深" ? "secondary" : "none"),
+      pause_after: ch==="雨" ? "short" : (ch==="吧" ? "long" : "none"),
+      v02: {
+        sentence_contour: ch==="让" ? "上山" : (ch==="夜" ? "下山[缺口保留]" : ""),
+        pause_type: ch==="雨" ? "扬停" : (ch==="吧" ? "落停" : ""),
+        stress_type: ch==="更" ? "强调" : "",
+        voice_quality: (ch==="夜"||ch==="色") ? "气声" : "实声",
+        breath_action: ch==="来" ? "偷气" : ""
+      },
+      knowledge_tags: []
+    });
+  });
+  DOC = { id: "demo_v02", title: "《海燕》与散文节选（v0.2 演示）", schema_version: "osot-v0.2",
+          genre_style: "文艺朗诵", global_rhythm: "高亢型", tokens: toks };
+  render();
+}
+
+function syncGlobal() {
+  if (!DOC) return;
+  DOC.genre_style = document.getElementById("genreStyle").value;
+  DOC.global_rhythm = document.getElementById("globalRhythm").value;
+  DOC.title = document.getElementById("docTitle").value;
+}
+
+function render() {
+  if (!DOC) return;
+  const area = document.getElementById("scriptArea");
+  area.innerHTML = "";
+  DOC.tokens.forEach((t, i) => {
+    const sp = document.createElement("span");
+    const sc = t.stress === "primary" ? "S2" : (t.stress === "secondary" ? "S1" : "");
+    sp.className = `tok ${sc} ${SELECTED===i ? "selected" : ""}`;
+    const tags = [t.v02.sentence_contour, t.v02.stress_type, t.v02.breath_action,
+                  t.v02.voice_quality && t.v02.voice_quality!=="实声" ? t.v02.voice_quality : ""].filter(Boolean);
+    sp.innerHTML = `<span>${t.char}</span><span class="mini-tags" title="${tags.join(' · ')}">${tags[0]||""}</span>`;
+    sp.onclick = () => {
+      SELECTED = i;
+      if (BRUSH.field === "stress") t.stress = BRUSH.val;
+      else if (BRUSH.field === "pause_type") {
+        t.v02.pause_type = BRUSH.val;
+        t.pause_after = {落停:"long", 扬停:"short", 直连:"connect", 曲连:"short"}[BRUSH.val] || "none";
+      } else if (BRUSH.field !== "mode") {
+        t.v02[BRUSH.field] = t.v02[BRUSH.field] === BRUSH.val ? "" : BRUSH.val;
+      }
+      t.knowledge_tags = Object.entries(t.v02).filter(([k,v]) => v && v!=="实声").map(([k,v]) => `${k}:${v}`);
+      render();
+    };
+    area.appendChild(sp);
+    if (t.punct_after) { const p = document.createElement("span"); p.textContent = t.punct_after; area.appendChild(p); }
+    const pm = {long:"//", short:"/", connect:"^"}[t.pause_after];
+    if (pm) { const m = document.createElement("span"); m.className="pause-mk"; m.textContent = pm; area.appendChild(m); }
+  });
+
+  if (SELECTED >= 0 && DOC.tokens[SELECTED]) {
+    const t = DOC.tokens[SELECTED];
+    document.getElementById("selDetail").textContent =
+      `选中「${t.char}」(#${SELECTED+1}) ｜ 重音:${t.stress} ｜ 停连:${t.pause_after}(${t.v02.pause_type||"-"}) ｜ 语势:${t.v02.sentence_contour||"-"} ｜ 重音类:${t.v02.stress_type||"-"} ｜ 发声态:${t.v02.voice_quality||"实声"} ｜ 补气:${t.v02.breath_action||"-"}`;
+  }
+  document.getElementById("inlinePreview").textContent = buildInline();
+}
+
+function buildInline() {
+  if (!DOC) return "";
+  let out = "", prevVq = "实声";
+  DOC.tokens.forEach(t => {
+    const vq = t.v02.voice_quality || "实声";
+    if (vq !== prevVq && vq !== "实声") out += `[${vq}]`;
+    prevVq = vq;
+    if (t.v02.breath_action) out += `[${t.v02.breath_action}]`;
+    out += (t.stress==="primary" ? "↑" : "") + t.char;
+    if (t.pause_after==="long") out += "…";
+    else if (t.pause_after==="short") out += (t.v02.pause_type==="曲连" ? "‚" : "‥");
+  });
+  return out;
+}
+
+function exportV02Json() {
+  if (!DOC) return;
+  syncGlobal();
+  const blob = new Blob([JSON.stringify(DOC, null, 2)], {type:"application/json"});
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = `${DOC.id || "osot"}_v02_annotated.json`;
+  a.click();
+}
+
+function copyInline() {
+  navigator.clipboard.writeText(buildInline()).then(() => alert("已复制内联韵律标记串！"));
+}
+
+loadDemo();
+</script>
+</body>
+</html>
